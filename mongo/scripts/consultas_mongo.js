@@ -4,102 +4,125 @@ use("municipio_digital")
 // CONSULTAS MONGODB — TPO Municipio Digital
 // ============================================================
 
-// --- C1: Tramites agrupados por estado ----------------------
-// Cuantos tramites hay en cada estado (pendiente/en_revision/resuelto).
-print("=== C1: Tramites por estado ===")
-db.tramites.aggregate([
-  { $group: { _id: "$estado_actual", total: { $sum: 1 } } },
-  { $sort: { total: -1 } }
-]).forEach(printjson)
 
-// --- C2: Tramites de un ciudadano especifico ----------------
-// Todos los tramites iniciados por un ciudadano dado su DNI.
-print("\n=== C2: Tramites del ciudadano DNI 30000001 ===")
-db.tramites.find(
-  { ciudadano_dni: "30000001" },
-  { numero_tramite: 1, tipo_tramite: 1, estado_actual: 1, fecha_inicio: 1, _id: 0 }
-).sort({ fecha_inicio: 1 }).forEach(printjson)
-
-// --- C3: Carga activa por organismo -------------------------
-// Cuantos tramites pendientes o en revision tiene cada organismo.
-print("\n=== C3: Carga activa por organismo ===")
-db.tramites.aggregate([
-  { $match: { estado_actual: { $in: ["pendiente", "en_revision"] } } },
-  { $group: { _id: "$organismo_actual", tramites_activos: { $sum: 1 } } },
-  { $sort: { tramites_activos: -1 } }
-]).forEach(printjson)
-
-// --- C4: Tramites con fecha estimada de resolucion vencida --
-// Tramites que no fueron resueltos y ya superaron su fecha estimada.
-print("\n=== C4: Tramites con SLA vencido ===")
-db.tramites.find(
-  {
-    estado_actual: { $ne: "resuelto" },
-    fecha_estimada_resolucion: { $lt: new Date() }
-  },
-  { numero_tramite: 1, tipo_tramite: 1, organismo_actual: 1,
-    estado_actual: 1, fecha_estimada_resolucion: 1, _id: 0 }
-).sort({ fecha_estimada_resolucion: 1 }).forEach(printjson)
-
-// --- C5: Historial de eventos de un tramite -----------------
-// Muestra todos los eventos embebidos de un tramite especifico.
-print("\n=== C5: Historial de eventos del tramite TRA-2026-000001 ===")
+// ------------------------------------------------------------
+// A) Historial completo de un trámite con eventos y documentos
+// ------------------------------------------------------------
+// Devuelve toda la información del trámite incluyendo eventos
+// y documentación asociada.
 db.tramites.find(
   { numero_tramite: "TRA-2026-000001" },
-  { numero_tramite: 1, tipo_tramite: 1, estado_actual: 1, eventos: 1, _id: 0 }
-).forEach(printjson)
-
-// --- C6: Documentos pendientes de validacion ----------------
-// Documentos que todavia no fueron validados, con su organismo validador.
-print("\n=== C6: Documentos pendientes de validacion ===")
-db.documentos.find(
-  { estado_validacion: "pendiente" },
-  { tramite_numero: 1, tipo: 1, nombre_archivo: 1, organismo_validador: 1, _id: 0 }
-).sort({ tramite_numero: 1 }).forEach(printjson)
-
-// --- C7: Tipos de tramite mas solicitados -------------------
-// Ranking de tipos de tramite por cantidad de tramites iniciados.
-print("\n=== C7: Tipos de tramite mas solicitados ===")
-db.tramites.aggregate([
-  { $group: { _id: "$tipo_tramite", cantidad: { $sum: 1 } } },
-  { $sort: { cantidad: -1 } }
-]).forEach(printjson)
-
-// --- C8: Ciudadanos con mas tramites iniciados --------------
-print("\n=== C8: Ciudadanos con mas tramites (top 5) ===")
-db.tramites.aggregate([
-  { $group: { _id: "$ciudadano_dni", total: { $sum: 1 } } },
-  { $sort: { total: -1 } },
-  { $limit: 5 },
   {
-    $lookup: {
-      from: "ciudadanos",
-      localField: "_id",
-      foreignField: "dni",
-      as: "datos_ciudadano"
+    _id: 0
+  }
+).forEach(printjson);
+
+
+// ------------------------------------------------------------
+// B) Lista de trámites de un ciudadano
+// ------------------------------------------------------------
+// Incluye tipo, estado actual y fecha estimada de resolución.
+db.tramites.find(
+  { ciudadano_dni: "30000001" },
+  {
+    numero_tramite: 1,
+    tipo_tramite: 1,
+    estado_actual: 1,
+    fecha_estimada_resolucion: 1,
+    _id: 0
+  }
+).sort({ fecha_inicio: 1 }).forEach(printjson);
+
+
+// ------------------------------------------------------------
+// C) Trámites fuera de SLA en la etapa actual
+// ------------------------------------------------------------
+// Calcula cuánto tiempo lleva el trámite en su etapa actual
+// y lo compara contra el SLA definido por el organismo.
+db.tramites.aggregate([
+  {
+    $addFields: {
+      ultimo_evento: { $arrayElemAt: ["$eventos", -1] }
     }
   },
   {
-    $project: {
-      _id: 0,
-      dni: "$_id",
-      total_tramites: "$total",
-      nombre: { $arrayElemAt: ["$datos_ciudadano.nombre", 0] },
-      apellido: { $arrayElemAt: ["$datos_ciudadano.apellido", 0] }
+    $lookup: {
+      from: "organismos",
+      localField: "organismo_actual",
+      foreignField: "nombre",
+      as: "org"
     }
-  }
-]).forEach(printjson)
-
-// --- C9: Tramites resueltos con tiempo real de resolucion ---
-// Solo tramites resueltos: diferencia entre fecha inicio y estimada.
-print("\n=== C9: Tramites resueltos — tiempo de resolucion (dias) ===")
-db.tramites.aggregate([
-  { $match: { estado_actual: "resuelto" } },
+  },
+  {
+    $unwind: "$org"
+  },
   {
     $project: {
       numero_tramite: 1,
       tipo_tramite: 1,
       organismo_actual: 1,
+      estado_actual: 1,
+      sla_dias: "$org.sla_dias_habiles_por_etapa",
+      dias_en_etapa: {
+        $divide: [
+          { $subtract: [new Date(), "$ultimo_evento.timestamp"] },
+          1000 * 60 * 60 * 24
+        ]
+      }
+    }
+  },
+  {
+    $match: {
+      $expr: {
+        $gt: ["$dias_en_etapa", "$sla_dias"]
+      }
+    }
+  },
+  {
+    $sort: { dias_en_etapa: -1 }
+  }
+]).forEach(printjson);
+
+
+// ------------------------------------------------------------
+// D) Cantidad de trámites iniciados por tipo en un período
+// ------------------------------------------------------------
+// Agrupa por tipo de trámite dentro de un rango de fechas.
+db.tramites.aggregate([
+  {
+    $match: {
+      fecha_inicio: {
+        $gte: new Date("2026-03-01"),
+        $lte: new Date("2026-03-31")
+      }
+    }
+  },
+  {
+    $group: {
+      _id: "$tipo_tramite",
+      cantidad: { $sum: 1 }
+    }
+  },
+  {
+    $sort: { cantidad: -1 }
+  }
+]).forEach(printjson);
+
+
+// ------------------------------------------------------------
+// E) Tiempo promedio de resolución por tipo de trámite
+// ------------------------------------------------------------
+// Calcula el promedio en días para trámites finalizados.
+db.tramites.aggregate([
+  {
+    $match: {
+      estado_actual: "resuelto",
+      fecha_estimada_resolucion: { $ne: null }
+    }
+  },
+  {
+    $project: {
+      tipo_tramite: 1,
       dias_resolucion: {
         $divide: [
           { $subtract: ["$fecha_estimada_resolucion", "$fecha_inicio"] },
@@ -108,15 +131,13 @@ db.tramites.aggregate([
       }
     }
   },
-  { $sort: { dias_resolucion: -1 } },
-  { $limit: 10 }
-]).forEach(printjson)
-
-// --- C10: Organismos y sus SLA configurados -----------------
-print("\n=== C10: SLA configurado por organismo ===")
-db.organismos.find(
-  {},
-  { nombre: 1, area_gobierno: 1, sla_dias_habiles_por_etapa: 1, _id: 0 }
-).sort({ sla_dias_habiles_por_etapa: 1 }).forEach(printjson)
-
-print("\nConsultas finalizadas.")
+  {
+    $group: {
+      _id: "$tipo_tramite",
+      promedio_dias: { $avg: "$dias_resolucion" }
+    }
+  },
+  {
+    $sort: { promedio_dias: -1 }
+  }
+]).forEach(printjson);
