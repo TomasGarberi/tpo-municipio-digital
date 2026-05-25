@@ -1,13 +1,9 @@
 from astrapy import DataAPIClient
 import json
-from pathlib import Path
 
 print("Iniciando conexión...")
 
-BASE_DIR = Path(__file__).resolve().parent
-TOKEN_FILE = BASE_DIR / "nahuel-token.json"
-
-with open(TOKEN_FILE, "r", encoding="utf-8") as f:
+with open("nahuelcingolani00@gmail.com-token.json") as f:
     secrets = json.load(f)
 
 TOKEN = secrets["token"]
@@ -19,6 +15,4 @@ db = client.get_database_by_api_endpoint(
     keyspace="municipio_digital"
 )
 
-print("✅ Conectado a Astra DB")
-print("Endpoint:", db.api_endpoint)
-print("Keyspace: municipio_digital")
+print("✅ Conectado a Astra DB:", db.name)
