@@ -1,5 +1,9 @@
-.DS_Store
-.vscode/
-.idea/
-*.log
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Credenciales / secretos
 .env
+*token*.json
+*.pem

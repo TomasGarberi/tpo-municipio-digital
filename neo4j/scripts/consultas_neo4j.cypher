@@ -2,69 +2,79 @@
 // CONSULTAS NEO4J — TPO Municipio Digital
 // ============================================================
 
-// --- C1: Recorrido completo de un tramite especifico ----------
-// Muestra el ciudadano que lo inicio, el tipo, los organismos
-// por los que debe pasar segun su tipo, y donde esta ahora.
-MATCH (c:Ciudadano)-[:INICIO]->(t:Tramite {numero: 'TRA-2026-000001'})-[:ES_DE_TIPO]->(tipo:TipoTramite),
-      (tipo)-[:INICIA_EN|PASA_POR]->(org:Organismo),
-      (t)-[:ESTA_EN]->(orgActual:Organismo)
+
+// ------------------------------------------------------------
+// A) Flujo completo de un tipo de trámite
+// ------------------------------------------------------------
+// Muestra los organismos por los que pasa un tipo de trámite.
+MATCH (tipo:TipoTramite {nombre: 'Habilitacion comercial'})-[r:INICIA_EN|PASA_POR]->(org:Organismo)
+RETURN tipo.nombre AS tipo_tramite,
+       type(r) AS relacion,
+       org.nombre AS organismo,
+       r.orden AS orden
+ORDER BY orden;
+
+
+// ------------------------------------------------------------
+// B) Organismo más crítico de la red
+// ------------------------------------------------------------
+// Identifica el organismo que afecta a más tipos de trámite.
+MATCH (org:Organismo)<-[:INICIA_EN|PASA_POR]-(tipo:TipoTramite)
+WITH org,
+     collect(DISTINCT tipo.nombre) AS tipos_tramite_afectados,
+     count(DISTINCT tipo) AS cantidad_tipos_afectados
+RETURN org.nombre AS organismo_critico,
+       cantidad_tipos_afectados,
+       tipos_tramite_afectados
+ORDER BY cantidad_tipos_afectados DESC, organismo_critico ASC
+LIMIT 1;
+
+
+// ------------------------------------------------------------
+// C) Estado actual de un trámite y etapas restantes
+// ------------------------------------------------------------
+// Ubica el trámite dentro del flujo y calcula lo que falta.
+MATCH (t:Tramite {numero: 'TRA-2026-000001'})-[:ES_DE_TIPO]->(tipo:TipoTramite),
+      (t)-[:ESTA_EN]->(orgActual:Organismo),
+      (tipo)-[r:INICIA_EN|PASA_POR]->(org:Organismo)
+WITH t, tipo, orgActual,
+     collect({
+       organismo: org.nombre,
+       orden: coalesce(r.orden, 1)
+     }) AS etapas
+UNWIND etapas AS etapa
+WITH t, tipo, orgActual, etapas, etapa
+WHERE etapa.organismo = orgActual.nombre
+WITH t, tipo, orgActual,
+     etapa.orden AS posicion_actual,
+     size(etapas) AS etapas_totales
+RETURN t.numero AS tramite,
+       tipo.nombre AS tipo_tramite,
+       orgActual.nombre AS organismo_actual,
+       posicion_actual,
+       etapas_totales,
+       (etapas_totales - posicion_actual) AS etapas_faltantes;
+
+
+// ------------------------------------------------------------
+// D) Detección de ciclos en el flujo
+// ------------------------------------------------------------
+// Busca loops en derivaciones entre organismos.
+MATCH (tipo:TipoTramite {nombre: 'Habilitacion comercial'})-[:INICIA_EN|PASA_POR]->(org:Organismo)
+MATCH p = (org)-[:DERIVA_A*1..10]->(org)
+RETURN tipo.nombre AS tipo_tramite, p;
+
+
+// ------------------------------------------------------------
+// E) Trámites de un ciudadano y dependencias
+// ------------------------------------------------------------
+// Devuelve trámites y relaciones de dependencia.
+MATCH (c:Ciudadano {dni: '30000001'})-[:INICIO]->(t:Tramite)
+OPTIONAL MATCH (t)-[r:DEPENDE_DE]->(dep:Tramite)
 RETURN c.nombre + ' ' + c.apellido AS ciudadano,
        t.numero AS tramite,
-       t.estado  AS estado,
-       tipo.nombre AS tipo,
-       collect(DISTINCT org.nombre) AS flujo_organismos,
-       orgActual.nombre AS organismo_actual;
-
-// --- C2: Flujo completo de un tipo de tramite ----------------
-// Util para visualizar el camino en el grafo.
-MATCH path = (tipo:TipoTramite {nombre: 'Habilitacion comercial'})-[:INICIA_EN|PASA_POR*]->(org:Organismo)
-RETURN path;
-
-// --- C3: Organismos mas demandados (cuello de botella) --------
-// Cuenta cuantos tipos de tramite pasan por cada organismo.
-MATCH (tipo:TipoTramite)-[:INICIA_EN|PASA_POR]->(org:Organismo)
-RETURN org.nombre AS organismo, COUNT(DISTINCT tipo) AS tipos_de_tramite
-ORDER BY tipos_de_tramite DESC;
-
-// --- C4: Tramites actualmente en cada organismo ---------------
-MATCH (t:Tramite)-[:ESTA_EN]->(org:Organismo)
-WHERE t.estado <> 'resuelto'
-RETURN org.nombre AS organismo, COUNT(t) AS tramites_activos
-ORDER BY tramites_activos DESC;
-
-// --- C5: Cadena de derivaciones entre organismos -------------
-MATCH (o1:Organismo)-[r:DERIVA_A]->(o2:Organismo)
-RETURN o1.nombre AS origen, r.condicion AS condicion, o2.nombre AS destino
-ORDER BY origen;
-
-// --- C6: Tramites con dependencias sin resolver ---------------
-// Muestra tramites bloqueados porque dependen de otro pendiente.
-MATCH (t:Tramite)-[:DEPENDE_DE]->(dep:Tramite)
-WHERE dep.estado <> 'resuelto'
-RETURN t.numero AS tramite_bloqueado,
-       t.estado  AS estado_bloqueado,
+       t.estado AS estado,
        dep.numero AS depende_de,
-       dep.estado  AS estado_dependencia;
-
-// --- C7: Todos los tramites de un ciudadano ------------------
-MATCH (c:Ciudadano {dni: '30000001'})-[:INICIO]->(t:Tramite)-[:ES_DE_TIPO]->(tipo:TipoTramite)
-RETURN t.numero AS tramite, tipo.nombre AS tipo, t.estado AS estado, t.fecha_inicio AS inicio
-ORDER BY t.fecha_inicio;
-
-// --- C8: Ciudadanos con mas tramites iniciados ---------------
-MATCH (c:Ciudadano)-[:INICIO]->(t:Tramite)
-RETURN c.nombre + ' ' + c.apellido AS ciudadano, COUNT(t) AS cantidad_tramites
-ORDER BY cantidad_tramites DESC
-LIMIT 5;
-
-// --- C9: Grafo completo de dependencias entre tramites --------
-MATCH path = (t:Tramite)-[:DEPENDE_DE*]->(dep:Tramite)
-RETURN path;
-
-// --- C10: Organismos sin carga activa ------------------------
-MATCH (org:Organismo)
-WHERE NOT EXISTS {
-  MATCH (t:Tramite)-[:ESTA_EN]->(org)
-  WHERE t.estado IN ['pendiente', 'en_revision']
-}
-RETURN org.nombre AS organismo_sin_carga_activa;
+       dep.estado AS estado_dependencia,
+       r.motivo AS motivo
+ORDER BY tramite;
