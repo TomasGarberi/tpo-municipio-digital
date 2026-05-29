@@ -138,6 +138,15 @@ def ok(data):
 def err(msg):
     return jsonify({"ok": False, "error": str(msg)}), 500
 
+def _select_initial_port():
+    port = 5000
+    allSetted = False
+    while not allSetted:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex(("localhost", port)) != 0:
+                allSetted = True
+        port += 1
+    return port
 
 # ══════════════════════════════════════════════════════════════
 # OP-1 — PANEL CIUDADANO
@@ -1463,7 +1472,9 @@ if __name__ == "__main__":
     if conectados == 0:
         print("\n  Sin conexiones — revisá las credenciales en .env\n")
     else:
+        import socket
+        port = _select_initial_port()
         print("Sistema listo.")
-        print(f"\n  🌐  http://localhost:5000\n")
+        print(f"\n  🌐  http://localhost:{port}\n")
         print("═" * 62 + "\n")
-        app.run(debug=False, host="0.0.0.0", port=5000)
+        app.run(debug=False, host="0.0.0.0", port=port)
