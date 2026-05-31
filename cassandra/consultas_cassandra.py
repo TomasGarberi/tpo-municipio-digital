@@ -275,3 +275,47 @@ if __name__ == "__main__":
     print(f"   → {len(notifs)} notificaciones totales\n")
 
     print("═" * 55 + "\n")
+
+# ── SECCIÓN 3.2 — Métricas de desempeño ──────────────────
+    print("── Sección 3.2 ─────────────────────────────────────")
+
+    print("\n3.2.b Reporte mensual Mesa de Entradas (2026-03):")
+    resumen = resumen_metricas(db, "Mesa de Entradas", "2026-03")
+    for k, v in resumen.items():
+        print(f"   {k}: {v}")
+
+    print("\n3.2.b Reporte mensual Direccion de Habilitaciones (2026-03):")
+    resumen2 = resumen_metricas(db, "Direccion de Habilitaciones", "2026-03")
+    for k, v in resumen2.items():
+        print(f"   {k}: {v}")
+
+    print("\n3.2.d Organismos con SLA crítico >20% (2026-03):")
+    for org in ["Mesa de Entradas", "Direccion de Habilitaciones",
+                "Secretaria de Desarrollo Social", "Secretaria de Obras Publicas",
+                "Direccion de Transito", "Tesoreria Municipal",
+                "Inspeccion General", "Direccion Ambiental"]:
+        r = resumen_metricas(db, org, "2026-03")
+        procesados = r["tramites_procesados"]
+        incumplidos = r["sla_incumplidos"]
+        if procesados > 0 and (incumplidos / procesados) > 0.20:
+            print(f"   ⚠ {org}: {r['tasa_cumplimiento_sla']} cumplimiento")
+
+    # ── SECCIÓN 3.3 — Demanda ciudadana ──────────────────────
+    print("\n── Sección 3.3 ─────────────────────────────────────")
+
+    print("\n3.3.a Demanda mensual 'Licencia de conducir' (últimos meses):")
+    demanda = demanda_total_por_zona(db, "Licencia de conducir", "2026-03")
+    print(f"   Total: {demanda['total']}")
+    for zona, cant in demanda["por_zona"].items():
+        print(f"   {zona}: {cant}")
+
+    print("\n3.3.c Zonas con mayor demanda de 'Habilitacion comercial' (2026-03):")
+    dem2 = demanda_total_por_zona(db, "Habilitacion comercial", "2026-03")
+    print(f"   Total: {dem2['total']}")
+    for zona, cant in dem2["por_zona"].items():
+        print(f"   {zona}: {cant}")
+
+    print("\n3.3.d Demanda 'Solicitud de beca' (2026-03):")
+    dem3 = demanda_total_por_zona(db, "Solicitud de beca", "2026-03")
+    for zona, cant in dem3["por_zona"].items():
+        print(f"   {zona}: {cant}")
