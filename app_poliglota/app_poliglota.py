@@ -7,7 +7,7 @@
 ║                                                              ║
 ║   Ejecutar:                                                  ║
 ║     pip install flask pymongo neo4j astrapy python-dotenv    ║
-║     python app_poliglota.py                                  ║
+║     python app_poliglota/app_poliglota.py                                  ║
 ║                                                              ║
 ║   Luego abrir: http://localhost:5000                         ║
 ╚══════════════════════════════════════════════════════════════╝
