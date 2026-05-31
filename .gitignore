@@ -7,3 +7,9 @@ __pycache__/
 .env
 *token*.json
 *.pem
+
+notepad .gitignore
+secure-connect-*.zip
+*.zip
+# Cassandra local secure connect bundle
+secure-connect-*.zip
