@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: tp_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  neo4j:
+    image: neo4j:5
+    container_name: tp_neo4j
+    ports:
+      - "7474:7474" # Panel web (Browser)
+      - "7687:7687" # Puerto de conexión Python (Bolt)
+    environment:
+      NEO4J_AUTH: neo4j/password123 # Podés cambiar la contraseña si querés
+    volumes:
+      - neo4j_data:/data
+
+  cassandra:
+    image: cassandra:4.1
+    container_name: tp_cassandra
+    ports:
+      - "9042:9042" # Puerto nativo de Cassandra
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+
+volumes:
+  mongo_data:
+  neo4j_data:
+  cassandra_data:
