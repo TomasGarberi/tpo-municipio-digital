@@ -6,7 +6,16 @@ Totalmente alineado con los identificadores de MongoDB y Neo4j.
 
 from astrapy import DataAPIClient
 from datetime import datetime, date, timedelta
+
 import json
+
+from pathlib import Path
+import json
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # ============================================================
 # CONEXIÓN
@@ -18,6 +27,9 @@ with open("nahuelcingolani00@gmail.com-token.json") as f:
 TOKEN    = secrets["token"]
 ENDPOINT = "https://d48813cf-c0fe-4f17-a523-fb8beeb4858a-us-east-2.apps.astra.datastax.com"
 KEYSPACE = "municipio_digital"
+TOKEN    = os.getenv("ASTRA_TOKEN")
+ENDPOINT = os.getenv("ASTRA_ENDPOINT")
+KEYSPACE = os.getenv("ASTRA_KEYSPACE")
 
 client = DataAPIClient(TOKEN)
 db     = client.get_database_by_api_endpoint(ENDPOINT, keyspace=KEYSPACE)
